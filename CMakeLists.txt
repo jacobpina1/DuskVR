@@ -223,6 +223,8 @@ elseif (MSVC)
 endif ()
 
 
+option(DUSK_ENABLE_VR "Enable VR support using OpenXR" ON)
+
 include(FetchContent)
 
 # Declare all dependencies first so CMake can download them in parallel
@@ -238,7 +240,23 @@ FetchContent_Declare(json
     URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
+
+if (DUSK_ENABLE_VR)
+    message(STATUS "dusk: Fetching OpenXR-SDK")
+    FetchContent_Declare(openxr_sdk
+        GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
+        GIT_TAG release-1.1.59
+        GIT_SHALLOW TRUE
+    )
+endif ()
+
 FetchContent_MakeAvailable(cxxopts json)
+
+if (DUSK_ENABLE_VR)
+    # OpenXR SDK build options
+    set(DYNAMIC_LOADER ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(openxr_sdk)
+endif ()
 
 if (DUSK_ENABLE_SENTRY_NATIVE)
     message(STATUS "dusk: Fetching sentry-native")
@@ -431,6 +449,9 @@ if (CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED OR CMAKE_LINK_GROUP_USING_RESCAN
 endif ()
 
 set(DUSK_FILES src/dusk/main.cpp ${GAME_BASE_FILES} ${GAME_DEBUG_FILES})
+if (DUSK_ENABLE_VR)
+    list(APPEND DUSK_FILES src/dusk/vr/VrSystem.cpp)
+endif ()
 if(ANDROID)
     add_library(dusk SHARED ${DUSK_FILES})
     set_target_properties(dusk PROPERTIES OUTPUT_NAME main)
@@ -439,8 +460,14 @@ else ()
 endif ()
 
 target_compile_definitions(dusk PRIVATE ${GAME_COMPILE_DEFS})
+if (DUSK_ENABLE_VR)
+    target_compile_definitions(dusk PRIVATE DUSK_ENABLE_VR=1)
+endif ()
 target_include_directories(dusk PRIVATE ${GAME_INCLUDE_DIRS})
 target_link_libraries(dusk PRIVATE aurora::main ${GAME_LIBS} ${JSYSTEM_LINK_LIBRARIES})
+if (DUSK_ENABLE_VR)
+    target_link_libraries(dusk PRIVATE openxr_loader)
+endif ()
 target_precompile_headers(dusk PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_SOURCE_DIR}/include/dusk_pch.hpp>")
 if (TARGET crashpad_handler)
     add_dependencies(dusk crashpad_handler)

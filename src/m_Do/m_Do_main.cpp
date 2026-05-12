@@ -82,6 +82,9 @@
 #include "dusk/io.hpp"
 #include "dusk/version.hpp"
 #include "dusk/discord_presence.hpp"
+#ifdef DUSK_ENABLE_VR
+#include "dusk/vr/VrSystem.hpp"
+#endif
 #include "tracy/Tracy.hpp"
 #include "f_pc/f_pc_draw.h"
 #include "tracy/Tracy.hpp"
@@ -294,6 +297,9 @@ void main01(void) {
         VIWaitForRetrace();
 
         dusk::lastFrameAuroraStats = *aurora_get_stats();
+#ifdef DUSK_ENABLE_VR
+        dusk::vr::VrSystem::getInstance().pollEvents();
+#endif
         mDoGph_gInf_c::updateRenderSize();
 
         dusk::ui::update();
@@ -698,6 +704,9 @@ int game_main(int argc, char* argv[]) {
     dusk::config::LoadFromUserPreferences();
     ApplyCVarOverrides(parsed_arg_options["cvar"]);
     dusk::crash_reporting::initialize();
+#ifdef DUSK_ENABLE_VR
+    dusk::vr::VrSystem::getInstance().initialize();
+#endif
     EnsureInitialPipelineCache(dusk::ConfigPath);
     // TODO: How to handle this?
     //PADSetDefaultMapping(&defaultPadMapping, PAD_TYPE_STANDARD);
@@ -724,6 +733,9 @@ int game_main(int argc, char* argv[]) {
         config.allowTextureReplacements = true;
         config.allowTextureDumps = false;
         auroraInfo = aurora_initialize(argc, argv, &config);
+#ifdef DUSK_ENABLE_VR
+        dusk::vr::VrSystem::getInstance().createSession(auroraInfo);
+#endif
     }
 
 #ifdef DUSK_DISCORD
@@ -756,6 +768,9 @@ int game_main(int argc, char* argv[]) {
         dusk::discord::shutdown();
 #endif
         dusk::ui::shutdown();
+#ifdef DUSK_ENABLE_VR
+        dusk::vr::VrSystem::getInstance().shutdown();
+#endif
         aurora_shutdown();
         return 0;
     }
@@ -834,7 +849,10 @@ int game_main(int argc, char* argv[]) {
                 dusk::discord::shutdown();
 #endif
                 dusk::ui::shutdown();
-                aurora_shutdown();
+        #ifdef DUSK_ENABLE_VR
+        dusk::vr::VrSystem::getInstance().shutdown();
+#endif
+        aurora_shutdown();
                 return 0;
             }
         }
@@ -908,6 +926,9 @@ int game_main(int argc, char* argv[]) {
     dusk::discord::shutdown();
 #endif
     dusk::ui::shutdown();
+#ifdef DUSK_ENABLE_VR
+    dusk::vr::VrSystem::getInstance().shutdown();
+#endif
     aurora_shutdown();
 
     return 0;

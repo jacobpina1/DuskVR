@@ -28,6 +28,10 @@
 #include "d/d_menu_collect.h"
 #include "d/d_meter2_info.h"
 #include "d/d_s_play.h"
+
+#ifdef DUSK_ENABLE_VR
+#include "dusk/vr/VrSystem.hpp"
+#endif
 #include "f_ap/f_ap_game.h"
 #include "f_op/f_op_actor_mng.h"
 #include "f_op/f_op_camera_mng.h"
@@ -2165,6 +2169,16 @@ int mDoGph_Painter() {
                           view_port->height, view_port->near_z, view_port->far_z);
             GXSetScissor(view_port->x_orig, view_port->y_orig, view_port->width,
                          view_port->height);
+
+#ifdef DUSK_ENABLE_VR
+            if (dusk::vr::VrSystem::getInstance().isEnabled()) {
+                Mtx vrOffset;
+                dusk::vr::VrSystem::getInstance().getHeadMatrix(vrOffset);
+                Mtx temp;
+                MTXConcat(vrOffset, camera_p->view.viewMtx, temp);
+                MTXCopy(temp, camera_p->view.viewMtx);
+            }
+#endif
 
 #ifdef TARGET_PC
             // FRAME INTERP NOTE: Call setViewMtx earlier so that it's interpolated in time for draw_info to use it
