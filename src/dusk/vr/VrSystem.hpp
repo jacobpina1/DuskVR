@@ -21,7 +21,7 @@ public:
     XrSession getXrSession() const { return m_session; }
 
     void pollEvents();
-    void updateHeadPose();
+    void updateHeadPose(XrTime predictedTime);
 
     XrVector3f getHeadPosition() const { return m_headPose.position; }
     XrQuaternionf getHeadOrientation() const { return m_headPose.orientation; }

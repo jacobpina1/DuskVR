@@ -54,11 +54,16 @@ void VrSystem::pollEvents() {
     XrEventDataBuffer event{XR_TYPE_EVENT_DATA_BUFFER};
     while (xrPollEvent(m_instance, &event) == XR_SUCCESS) {
         switch (event.type) {
+            case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
+                std::cout << "OpenXR: Instance loss pending" << std::endl;
+                break;
             case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
                 auto* stateChanged = reinterpret_cast<XrEventDataSessionStateChanged*>(&event);
                 m_sessionState = stateChanged->state;
+                std::cout << "OpenXR: Session state changed to " << m_sessionState << std::endl;
+                
                 if (m_sessionState == XR_SESSION_STATE_READY) {
-                    // Start session
+                    std::cout << "OpenXR: Session ready, beginning session..." << std::endl;
                     XrSessionBeginInfo beginInfo{XR_TYPE_SESSION_BEGIN_INFO};
                     beginInfo.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
                     xrBeginSession(m_session, &beginInfo);
@@ -77,21 +82,35 @@ void VrSystem::pollEvents() {
     if (m_sessionState == XR_SESSION_STATE_SYNCHRONIZED ||
         m_sessionState == XR_SESSION_STATE_VISIBLE ||
         m_sessionState == XR_SESSION_STATE_FOCUSED) {
-        updateHeadPose();
+        
+        // Even without swapchains, we must call wait/begin/end to tell the 
+        // compositor we are alive and want to be displayed.
+        XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
+        XrFrameState frameState{XR_TYPE_FRAME_STATE};
+        xrWaitFrame(m_session, &frameWaitInfo, &frameState);
+
+        XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
+        xrBeginFrame(m_session, &frameBeginInfo);
+
+        updateHeadPose(frameState.predictedDisplayTime);
+
+        // End frame with no layers for now (just to stay in sync)
+        XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
+        frameEndInfo.displayTime = frameState.predictedDisplayTime;
+        frameEndInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+        frameEndInfo.layerCount = 0;
+        frameEndInfo.layers = nullptr;
+        xrEndFrame(m_session, &frameEndInfo);
     }
 }
 
-void VrSystem::updateHeadPose() {
+void VrSystem::updateHeadPose(XrTime predictedTime) {
     if (m_session == XR_NULL_HANDLE || m_appSpace == XR_NULL_HANDLE || m_viewSpace == XR_NULL_HANDLE) {
         return;
     }
 
-    XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
-    XrFrameState frameState{XR_TYPE_FRAME_STATE};
-    xrWaitFrame(m_session, &frameWaitInfo, &frameState);
-
     XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
-    XrResult result = xrLocateSpace(m_viewSpace, m_appSpace, frameState.predictedDisplayTime, &location);
+    XrResult result = xrLocateSpace(m_viewSpace, m_appSpace, predictedTime, &location);
     if (result == XR_SUCCESS && (location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT)) {
         m_headPose = location.pose;
     }
