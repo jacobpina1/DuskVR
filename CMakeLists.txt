@@ -248,6 +248,7 @@ if (DUSK_ENABLE_VR)
         GIT_TAG release-1.1.59
         GIT_SHALLOW TRUE
     )
+    find_package(Vulkan REQUIRED)
 endif ()
 
 FetchContent_MakeAvailable(cxxopts json)
