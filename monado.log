@@ -1,0 +1,18 @@
+ INFO [ipc_server_main_common] Monado(XRT) by Collabora et al 'v25.1.0-479-g81e02d336' starting up...
+ERROR [init_epoll] epoll_ctl(stdin) failed '-1'
+ERROR [init_all] ipc_server_mainloop_init failed: XRT_ERROR_IPC_MAINLOOP_FAILED_TO_INIT [/home/jacobpina/.cache/paru/clone/monado-git/src/monado/src/xrt/ipc/server/ipc_server_process.c:360]
+ERROR [ipc_server_main_common] init_all failed: XRT_ERROR_IPC_MAINLOOP_FAILED_TO_INIT [/home/jacobpina/.cache/paru/clone/monado-git/src/monado/src/xrt/ipc/server/ipc_server_process.c:956]
+ INFO [print_linux_end_user_failed_information] 
+################################################################################
+#                                                                              #
+#                  The Monado service has failed to start.                     #
+#                                                                              #
+# If you want to report please upload the logs of the service as a text file.  #
+# You can also capture the output the monado-cli info command to provide more  #
+# information about your system, that will help diagnosing your problem. The   #
+# below commands is how you best capture the information from the commands.    #
+#                                                                              #
+#     monado-cli info 2>&1 | tee info.txt                                      #
+#     monado-service 2>&1 | tee logs.txt                                       #
+#                                                                              #
+################################################################################

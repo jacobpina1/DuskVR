@@ -10,7 +10,9 @@
 #include <windows.h>
 #endif
 
+#include <vulkan/vulkan.h>
 #include <openxr/openxr.h>
+#include <openxr/openxr_platform.h>
 
 #include "VrSystem.hpp"
 #include "dusk/logging.h"
@@ -30,6 +32,9 @@ struct VrSystem::Impl {
     
     struct Swapchain {
         XrSwapchain handle = XR_NULL_HANDLE;
+        int32_t width = 0;
+        int32_t height = 0;
+        std::vector<XrSwapchainImageVulkanKHR> images;
     };
     
     Swapchain swapchains[2];
@@ -106,11 +111,13 @@ bool VrSystem::initialize() {
 void VrSystem::shutdown() {
     if (m_impl->viewSpace != XR_NULL_HANDLE) xrDestroySpace(m_impl->viewSpace);
     if (m_impl->appSpace != XR_NULL_HANDLE) xrDestroySpace(m_impl->appSpace);
+    
     for (int i = 0; i < 2; ++i) {
         if (m_impl->swapchains[i].handle != XR_NULL_HANDLE) {
             xrDestroySwapchain(m_impl->swapchains[i].handle);
         }
     }
+    
     if (m_impl->session != XR_NULL_HANDLE) xrDestroySession(m_impl->session);
     if (m_impl->instance != XR_NULL_HANDLE) xrDestroyInstance(m_impl->instance);
     m_enabled = false;
@@ -207,6 +214,11 @@ bool VrSystem::createSwapchains() {
         createInfo.sampleCount = views[i].recommendedSwapchainSampleCount;
         createInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
         xrCreateSwapchain(m_impl->session, &createInfo, &m_impl->swapchains[i].handle);
+        
+        uint32_t imageCount;
+        xrEnumerateSwapchainImages(m_impl->swapchains[i].handle, 0, &imageCount, nullptr);
+        m_impl->swapchains[i].images.resize(imageCount, {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN_KHR});
+        xrEnumerateSwapchainImages(m_impl->swapchains[i].handle, imageCount, &imageCount, (XrSwapchainImageBaseHeader*)m_impl->swapchains[i].images.data());
     }
     return true;
 }
@@ -256,6 +268,11 @@ void VrSystem::getEyeProjectionMatrix(uint32_t eye, Mtx44 m, float nearZ, float 
 
 bool VrSystem::createInstance() {
     std::vector<const char*> extensions;
+    extensions.push_back("XR_KHR_vulkan_enable");
+#ifdef _WIN32
+    extensions.push_back("XR_KHR_D3D11_enable");
+    extensions.push_back("XR_KHR_D3D12_enable");
+#endif
     XrInstanceCreateInfo createInfo{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strncpy(createInfo.applicationInfo.applicationName, "Dusk VR", XR_MAX_APPLICATION_NAME_SIZE);
     createInfo.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;

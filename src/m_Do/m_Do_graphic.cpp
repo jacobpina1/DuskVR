@@ -2165,266 +2165,111 @@ int mDoGph_Painter() {
             captureScreenSetScissor(&view_port->scissor);
             #endif
 
-            GXSetViewport(view_port->x_orig, view_port->y_orig, view_port->width,
-                          view_port->height, view_port->near_z, view_port->far_z);
-            GXSetScissor(view_port->x_orig, view_port->y_orig, view_port->width,
-                         view_port->height);
-
 #ifdef DUSK_ENABLE_VR
-            if (dusk::vr::VrSystem::getInstance().isEnabled()) {
-                Mtx vrOffset;
-                dusk::vr::VrSystem::getInstance().getHeadMatrix(vrOffset);
-                Mtx temp;
-                MTXConcat(vrOffset, camera_p->view.viewMtx, temp);
-                MTXCopy(temp, camera_p->view.viewMtx);
-            }
+            int eyeCount = dusk::vr::VrSystem::getInstance().isEnabled() ? 2 : 1;
+#else
+            int eyeCount = 1;
 #endif
+
+            for (int eye = 0; eye < eyeCount; ++eye) {
+#ifdef DUSK_ENABLE_VR
+                if (dusk::vr::VrSystem::getInstance().isEnabled()) {
+                    dusk::vr::VrSystem::getInstance().acquireImage(eye);
+                    
+                    // Update view matrix for this eye
+                    dusk::vr::VrSystem::getInstance().getEyeViewMatrix(eye, camera_p->view.viewMtx);
+                    
+                    // Update projection matrix for this eye
+                    Mtx44 vrProj;
+                    dusk::vr::VrSystem::getInstance().getEyeProjectionMatrix(eye, vrProj, camera_p->view.near_, camera_p->view.far_);
+                    std::memcpy(camera_p->view.projMtx, vrProj, sizeof(Mtx44));
+                }
+#endif
+
+                GXSetViewport(view_port->x_orig, view_port->y_orig, view_port->width,
+                              view_port->height, view_port->near_z, view_port->far_z);
+                GXSetScissor(view_port->x_orig, view_port->y_orig, view_port->width,
+                             view_port->height);
 
 #ifdef TARGET_PC
-            // FRAME INTERP NOTE: Call setViewMtx earlier so that it's interpolated in time for draw_info to use it
-            j3dSys.setViewMtx(camera_p->view.viewMtx);
-            JPADrawInfo draw_info(j3dSys.getViewMtx(), camera_p->view.fovy, camera_p->view.aspect);
-            mDoGph_gInf_c::setWideZoomLightProjection(draw_info.mPrjMtx);
+                // FRAME INTERP NOTE: Call setViewMtx earlier so that it's interpolated in time for draw_info to use it
+                j3dSys.setViewMtx(camera_p->view.viewMtx);
+                JPADrawInfo draw_info(j3dSys.getViewMtx(), camera_p->view.fovy, camera_p->view.aspect);
+                mDoGph_gInf_c::setWideZoomLightProjection(draw_info.mPrjMtx);
 #else
-            JPADrawInfo draw_info(camera_p->view.viewMtx, camera_p->view.fovy, camera_p->view.aspect);
+                JPADrawInfo draw_info(camera_p->view.viewMtx, camera_p->view.fovy, camera_p->view.aspect);
 #endif
 
-            #if 0 && WIDESCREEN_SUPPORT
-            if (mDoGph_gInf_c::isWideZoom()) {
-                Mtx44 sp140;
-                draw_info.getPrjMtx(sp140);
+                dComIfGp_setCurrentWindow(window_p);
+                dComIfGp_setCurrentView(&camera_p->view);
+                dComIfGp_setCurrentViewport(view_port);
+                GXSetProjection(camera_p->view.projMtx, GX_PERSPECTIVE);
 
-                sp140[0][0] *= 2.0f;
-                sp140[0][2] = 0.0f;
-                sp140[1][1] *= -2.0f;
-                sp140[1][2] = 0.0f;
-                sp140[2][2] = -2.0f;
-                mDoGph_gInf_c::setWideZoomProjection(sp140);
+                PPCSync();
 
-                sp140[0][0] *= 0.5f;
-                sp140[0][2] = (0.5f * sp140[0][2]) - 0.5f;
-                sp140[1][1] *= -0.5f;
-                sp140[1][2] = (-0.5f * sp140[1][2]) - 0.5f;
-                sp140[2][2] = 0.0f;
-                draw_info.setPrjMtx(sp140);
-            }
-            #endif
-
-            #if DEBUG
-            captureScreenPerspDrawInfo(draw_info);
-            #endif
-
-            dComIfGp_setCurrentWindow(window_p);
-            dComIfGp_setCurrentView(&camera_p->view);
-            dComIfGp_setCurrentViewport(view_port);
-            GXSetProjection(camera_p->view.projMtx, GX_PERSPECTIVE);
-
-            #if DEBUG
-            captureScreenSetProjection(camera_p->view.projMtx);
-            #endif
-
-            PPCSync();
-
-#ifndef TARGET_PC
-            j3dSys.setViewMtx(camera_p->view.viewMtx);
-#endif
-            dKy_setLight();
+                dKy_setLight();
 #if TARGET_PC
-            if (dusk::getSettings().game.enableFrameInterpolation) {
-                dKy_setLight_again();
-            }
-#endif
-            GX_DEBUG_GROUP(dComIfGd_drawOpaListSky);
-            GX_DEBUG_GROUP(dComIfGd_drawXluListSky);
-
-            GXSetClipMode(GX_CLIP_ENABLE);
-
-            #if DEBUG
-            // "drawing up to Background (Translucent) (Rendering)"
-            fapGm_HIO_c::stopCpuTimer("背景（半透明）描画まで（レンダリング）");
-
-            fapGm_HIO_c::startCpuTimer();
-            #endif
-
-            GX_DEBUG_GROUP(dComIfGd_drawOpaListBG);
-            GX_DEBUG_GROUP(dComIfGd_drawOpaListDarkBG);
-            GX_DEBUG_GROUP(dComIfGd_drawOpaListMiddle);
-
-            if (fapGmHIO_getParticle()) {
-                GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri0_B, &draw_info);
-            }
-
-            if (fapGmHIO_getParticle()) {
-                GX_DEBUG_GROUP(dComIfGp_particle_drawNormalPri0_B, &draw_info);
-            }
-
-            #if DEBUG
-            // "drawing up to Terrain (Opaque)"
-            fapGm_HIO_c::stopCpuTimer("地形（不透明）描画２まで（レンダリング）");
-
-            fapGm_HIO_c::startCpuTimer();
-            #endif
-
-            GX_DEBUG_GROUP(dComIfGd_drawShadow, camera_p->view.viewMtx);
-
-            #if DEBUG
-            // "shadow drawing (Rendering)"
-            fapGm_HIO_c::stopCpuTimer("影描画（レンダリング）");
-
-            fapGm_HIO_c::startCpuTimer();
-            #endif
-
-            GX_DEBUG_GROUP(dComIfGd_drawOpaList);
-
-            if (DEBUG && g_kankyoHIO.navy.field_0x30d) {
-                if (dKy_darkworld_check() != TRUE) {
-                    GX_DEBUG_GROUP(dComIfGd_drawOpaListDark);
+                if (dusk::getSettings().game.enableFrameInterpolation) {
+                    dKy_setLight_again();
                 }
-            } else {
-                GX_DEBUG_GROUP(dComIfGd_drawOpaListDark);
-            }
-
-#if TARGET_PC
-            if (dusk::getSettings().game.enableFrameInterpolation) {
-                // FRAME INTERP NOTE: Currently only recalculating points for Epona's reins. Need a more global solution.
-                if (daHorse_c* horse = dComIfGp_getHorseActor()) {
-                    horse->lerpControlPoints(dusk::frame_interp::get_interpolation_step());
-                }
-                g_dComIfG_gameInfo.drawlist.refresh3DlineMats(camera_p->view.lookat.eye);
-            }
 #endif
+                GX_DEBUG_GROUP(dComIfGd_drawOpaListSky);
+                GX_DEBUG_GROUP(dComIfGd_drawXluListSky);
 
-            GX_DEBUG_GROUP(dComIfGd_drawOpaListPacket);
-
-            #if DEBUG
-            // "drawing up to special-use drawing (Opaque) except J3D (Rendering)"
-            fapGm_HIO_c::stopCpuTimer("Ｊ３Ｄ以外などの特殊用（不透明）描画まで（レンダリング）");
-
-            fapGm_HIO_c::startCpuTimer();
-            #endif
-
-            GX_DEBUG_GROUP(dComIfGd_drawXluListBG);
-            GX_DEBUG_GROUP(dComIfGd_drawXluListDarkBG);
-
-            if (fapGmHIO_getParticle()) {
-                GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri0_A, &draw_info);
-                GX_DEBUG_GROUP(dComIfGp_particle_drawNormalPri0_A, &draw_info);
-            }
-
-            #if DEBUG
-            // "drawing up to Terrain (Translucent)"
-            fapGm_HIO_c::stopCpuTimer("地形（半透明）描画２まで（レンダリング）");
-
-            fapGm_HIO_c::startCpuTimer();
-            #endif
-
-            GX_DEBUG_GROUP(dComIfGd_drawXluList);
-
-            if (DEBUG && g_kankyoHIO.navy.field_0x30d) {
-                if (dKy_darkworld_check() != TRUE) {
-                    GX_DEBUG_GROUP(dComIfGd_drawXluListDark);
-                }
-            } else {
-                GX_DEBUG_GROUP(dComIfGd_drawXluListDark);
-            }
-
-            #if DEBUG
-            // "drawing up to Object (Translucent)"
-            fapGm_HIO_c::stopCpuTimer("オブジェクト（半透明）描画２まで（レンダリング）");
-            #endif
-
-            j3dSys.reinitGX();
-            GXSetClipMode(GX_CLIP_ENABLE);
-
-#if DEBUG
-            if (dJcame_c::get()) {
-                dJcame_c::get()->show3D(camera_p->view.viewMtx);
-            }
-            if (dJprev_c::get()) {
-                dJprev_c::get()->show3D(camera_p->view.viewMtx);
-            }
-#endif
-
-            if (!dComIfGp_isPauseFlag()) {
-                #if DEBUG
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                GX_DEBUG_GROUP(motionBlure, &camera_p->view);
-
-                #if DEBUG
-                // "blur filter (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("ブラーフィルター（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                GX_DEBUG_GROUP(drawDepth2, &camera_p->view, view_port, dComIfGp_getCameraZoomForcus(camera_id));
-                GXInvalidateTexAll();
                 GXSetClipMode(GX_CLIP_ENABLE);
 
-                #if DEBUG
-                // "depth of field (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("被写界深度フィルター（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                if (!(DEBUG && g_kankyoHIO.navy.field_0x30d != 0 &&
-                      dKy_darkworld_check() == TRUE)) {
-                    if (g_env_light.is_blure == 0) {
-                        GX_DEBUG_GROUP(dComIfGd_drawOpaListInvisible);
-                        GX_DEBUG_GROUP(dComIfGd_drawXluListInvisible);
-                    }
-                }
-
-
-                #if DEBUG
-                // "drawing up to projection (Translucent)"
-                fapGm_HIO_c::stopCpuTimer("投影用（半透明）描画まで（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
+                GX_DEBUG_GROUP(dComIfGd_drawOpaListBG);
+                GX_DEBUG_GROUP(dComIfGd_drawOpaListDarkBG);
+                GX_DEBUG_GROUP(dComIfGd_drawOpaListMiddle);
 
                 if (fapGmHIO_getParticle()) {
-                    GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri4, &draw_info);
-                    GX_DEBUG_GROUP(dComIfGp_particle_drawProjection, &draw_info);
+                    GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri0_B, &draw_info);
+                    GX_DEBUG_GROUP(dComIfGp_particle_drawNormalPri0_B, &draw_info);
                 }
 
-                #if DEBUG
-                // "drawing up to projection particle (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("投影パーティクル描画まで（レンダリング）");
+                GX_DEBUG_GROUP(dComIfGd_drawShadow, camera_p->view.viewMtx);
+                GX_DEBUG_GROUP(dComIfGd_drawOpaList);
+                GX_DEBUG_GROUP(dComIfGd_drawOpaListDark);
 
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                GX_DEBUG_GROUP(dComIfGd_drawListZxlu);
-
-                #if DEBUG
-                // "drawing up to 2-draw Z-update translucent (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("２度描きＺ更新半透明描画まで（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                GXSetClipMode(GX_CLIP_ENABLE);
-
-                if (DEBUG && g_kankyoHIO.navy.field_0x30d) {
-                    if (dKy_darkworld_check() != TRUE) {
-                        GX_DEBUG_GROUP(dComIfGd_drawOpaListFilter);
+#if TARGET_PC
+                if (dusk::getSettings().game.enableFrameInterpolation) {
+                    if (daHorse_c* horse = dComIfGp_getHorseActor()) {
+                        horse->lerpControlPoints(dusk::frame_interp::get_interpolation_step());
                     }
-                } else {
-                    GX_DEBUG_GROUP(dComIfGd_drawOpaListFilter);
+                    g_dComIfG_gameInfo.drawlist.refresh3DlineMats(camera_p->view.lookat.eye);
+                }
+#endif
+
+                GX_DEBUG_GROUP(dComIfGd_drawOpaListPacket);
+                GX_DEBUG_GROUP(dComIfGd_drawXluListBG);
+                GX_DEBUG_GROUP(dComIfGd_drawXluListDarkBG);
+
+                if (fapGmHIO_getParticle()) {
+                    GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri0_A, &draw_info);
+                    GX_DEBUG_GROUP(dComIfGp_particle_drawNormalPri0_A, &draw_info);
                 }
 
-                #if DEBUG
-                // "drawing up to filter draw (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("フィルター用描画まで（レンダリング）");
+                GX_DEBUG_GROUP(dComIfGd_drawXluList);
+                GX_DEBUG_GROUP(dComIfGd_drawXluListDark);
 
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
+                j3dSys.reinitGX();
                 GXSetClipMode(GX_CLIP_ENABLE);
+
+                if (!dComIfGp_isPauseFlag()) {
+                    GX_DEBUG_GROUP(motionBlure, &camera_p->view);
+                    GX_DEBUG_GROUP(drawDepth2, &camera_p->view, view_port, dComIfGp_getCameraZoomForcus(camera_id));
+                    GXInvalidateTexAll();
+                    GXSetClipMode(GX_CLIP_ENABLE);
+
+                    if (fapGmHIO_getParticle()) {
+                        GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri4, &draw_info);
+                        GX_DEBUG_GROUP(dComIfGp_particle_drawProjection, &draw_info);
+                    }
+                }
+
+                GX_DEBUG_GROUP(dComIfGd_drawIndScreen);
+                GX_DEBUG_GROUP(mDoGph_gInf_c::getBloom()->draw);
+                GX_DEBUG_GROUP(dComIfGd_drawOpaList3Dlast);
 
                 if (fapGmHIO_getParticle()) {
                     GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri1, &draw_info);
@@ -2434,144 +2279,7 @@ int mDoGph_Painter() {
                     GX_DEBUG_GROUP(dComIfGp_particle_drawFogPri3, &draw_info);
                     GX_DEBUG_GROUP(dComIfGp_particle_drawP1, &draw_info);
                     GX_DEBUG_GROUP(dComIfGp_particle_drawDarkworld, &draw_info);
-                }
-
-                #if DEBUG
-                // "drawing up to dark world particle (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("闇世界でもカラーのパーティクル描画まで（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                retry_captue_frame(&camera_p->view, view_port, dComIfGp_getCameraZoomForcus(camera_id));
-
-                #if DEBUG
-                // "Frame Buffer capture 2nd time (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("フレームバッファキャプチャー２回目（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                GXSetClipMode(GX_CLIP_ENABLE);
-
-                if (!(DEBUG && g_kankyoHIO.navy.field_0x30d != 0 &&
-                      dKy_darkworld_check() == TRUE)) {
-                    if (g_env_light.is_blure == 1) {
-                        GX_DEBUG_GROUP(dComIfGd_drawOpaListInvisible);
-                        GX_DEBUG_GROUP(dComIfGd_drawXluListInvisible);
-                    }
-                }
-
-                if (fapGmHIO_getParticle()) {
                     GX_DEBUG_GROUP(dComIfGp_particle_drawScreen, &draw_info);
-                }
-
-                #if DEBUG
-                // "drawing up to full projection particle (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("完全投影用パーティクル描画まで（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                GXSetClipMode(GX_CLIP_ENABLE);
-
-                GX_DEBUG_GROUP(dComIfGd_drawIndScreen);
-
-                if (strcmp(dComIfGp_getStartStageName(), "F_SP124") == 0) {
-                    retry_captue_frame(&camera_p->view, view_port,
-                                       dComIfGp_getCameraZoomForcus(camera_id));
-                }
-
-                GXSetViewport(0.0f, 0.0f, FB_WIDTH, FB_HEIGHT, 0.0f, 1.0f);
-
-                Mtx m2;
-                Mtx44 m;
-
-                #if TARGET_PC
-                C_MTXPerspective(m, AREG_F(8) + 60.0f, 1.3571428f, 1.0f, 100000.0f);
-                #else
-                C_MTXPerspective(m, AREG_F(8) + 60.0f, mDoGph_gInf_c::getAspect(), 1.0f, 100000.0f);
-                #endif
-
-                GXSetProjection(m, GX_PERSPECTIVE);
-                cXyz sp38c(0.0f, 0.0f, AREG_F(7) + -2.0f);
-                cXyz sp398(0.0f, 1.0f, 0.0f);
-
-                cMtx_lookAt(m2, &sp38c, &cXyz::Zero, &sp398, 0);
-                j3dSys.setViewMtx(m2);
-                GX_DEBUG_GROUP(dComIfGd_drawXluList2DScreen);
-
-                j3dSys.setViewMtx(camera_p->view.viewMtx);
-                GXSetProjection(camera_p->view.projMtx, GX_PERSPECTIVE);
-
-                #if DEBUG
-                // "drawing up to full projection screen (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("完全投影用スクリーン描画まで（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                j3dSys.reinitGX();
-
-                if ((g_env_light.camera_water_in_status || !strcmp(dComIfGp_getStartStageName(), "D_MN08")))
-                {
-                    u8 enable = mDoGph_gInf_c::getBloom()->getEnable();
-                    GXColor color = *mDoGph_gInf_c::getBloom()->getMonoColor();
-                    if (color.a != 0 || enable) {
-                        retry_captue_frame(&camera_p->view, view_port,
-                                           dComIfGp_getCameraZoomForcus(camera_id));
-                    }
-                }
-
-                #if DEBUG
-                // "Frame Buffer capture 3rd time (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("※フレームバッファキャプチャー３回目（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                GX_DEBUG_GROUP(mDoGph_gInf_c::getBloom()->draw);
-                j3dSys.setViewMtx(camera_p->view.viewMtx);
-                GXSetProjection(camera_p->view.projMtx, GX_PERSPECTIVE);
-
-                #if DEBUG
-                if (g_kankyoHIO.navy.field_0x30d != 0 && dKy_darkworld_check() == TRUE) {
-                    dComIfGd_drawOpaListDark();
-                    dComIfGd_drawXluListDark();
-                    retry_captue_frame(&camera_p->view, view_port,
-                                       dComIfGp_getCameraZoomForcus(camera_id));
-                    dComIfGd_drawOpaListInvisible();
-                    dComIfGd_drawXluListInvisible();
-                    dComIfGd_drawOpaListFilter();
-                }
-                #endif
-
-                GX_DEBUG_GROUP(dComIfGd_drawOpaList3Dlast);
-
-                #if DEBUG
-                // "saturation add filter (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("飽和加算フィルター（レンダリング）");
-
-                fapGm_HIO_c::startCpuTimer();
-                #endif
-
-                if (fapGmHIO_getParticle()) {
-                    #if WIDESCREEN_SUPPORT
-                    if (mDoGph_gInf_c::isWideZoom()) {
-                        ortho.setOrtho(0.0f, 0.0f, FB_WIDTH_BASE, FB_HEIGHT_BASE, 100000.0f, -100000.0f);
-                    } else
-                    #endif
-                    {
-                        ortho.setOrtho(mDoGph_gInf_c::getMinXF(), mDoGph_gInf_c::getMinYF(),
-                                       mDoGph_gInf_c::getWidthF(), mDoGph_gInf_c::getHeightF(),
-                                       100000.0f, -100000.0f);
-                    }
-                    ortho.setPort();
-
-                    Mtx m3;
-                    MTXTrans(m3, FB_WIDTH_BASE / 2, FB_HEIGHT_BASE / 2, 0.0f);
-                    JPADrawInfo draw_info2(m3, 0.0f, FB_HEIGHT_BASE, 0.0f, FB_WIDTH_BASE);
-                    dComIfGp_particle_draw2Dgame(&draw_info2);
                 }
 
                 trimming(&camera_p->view, view_port);
@@ -2582,10 +2290,11 @@ int mDoGph_Painter() {
                     mDoGph_gInf_c::calcFade();
                 }
 
-                #if DEBUG
-                // "color fade draw (Rendering)"
-                fapGm_HIO_c::stopCpuTimer("カラーフェード描画（レンダリング）");
-                #endif
+#ifdef DUSK_ENABLE_VR
+                if (dusk::vr::VrSystem::getInstance().isEnabled()) {
+                    dusk::vr::VrSystem::getInstance().releaseImage(eye);
+                }
+#endif
             }
         }
     }
