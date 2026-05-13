@@ -1,10 +1,10 @@
 #pragma once
 
-#include <openxr/openxr.h>
 #include <aurora/aurora.h>
 #include <dolphin/mtx.h>
 #include <vector>
 #include <string>
+#include <cstdint>
 
 namespace dusk::vr {
 
@@ -17,33 +17,29 @@ public:
     void shutdown();
 
     bool isEnabled() const { return m_enabled; }
-    XrInstance getXrInstance() const { return m_instance; }
-    XrSession getXrSession() const { return m_session; }
-
-    void pollEvents();
-    void updateHeadPose(XrTime predictedTime);
-
-    XrVector3f getHeadPosition() const { return m_headPose.position; }
-    XrQuaternionf getHeadOrientation() const { return m_headPose.orientation; }
     
+    void pollEvents();
+    void updateHeadPose(uint64_t predictedTime);
+
     void getHeadMatrix(Mtx m) const;
+    void getEyeViewMatrix(uint32_t eye, Mtx m) const;
+    void getEyeProjectionMatrix(uint32_t eye, Mtx44 m, float nearZ, float farZ) const;
+
+    bool createSwapchains();
+    uint32_t acquireImage(uint32_t eye);
+    void releaseImage(uint32_t eye);
 
 private:
-    VrSystem() = default;
-    ~VrSystem() = default;
+    VrSystem();
+    ~VrSystem();
 
     bool createInstance();
-    bool createSession();
     bool createSpaces();
     
     bool m_enabled = false;
-    XrInstance m_instance = XR_NULL_HANDLE;
-    XrSystemId m_systemId = XR_NULL_SYSTEM_ID;
-    XrSession m_session = XR_NULL_HANDLE;
-    XrSessionState m_sessionState = XR_SESSION_STATE_UNKNOWN;
-    XrSpace m_appSpace = XR_NULL_HANDLE;
-    XrSpace m_viewSpace = XR_NULL_HANDLE;
-    XrPosef m_headPose = {{0, 0, 0, 1}, {0, 0, 0}};
+    
+    struct Impl;
+    Impl* m_impl;
 };
 
 } // namespace dusk::vr
